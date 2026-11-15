@@ -1,116 +1,185 @@
 # IrisVision AI
 
-A local-first Iris classification workbench that preserves the original KNN implementation and expands it into a tested, interactive Streamlit dashboard. It compares K-Nearest Neighbors (KNN), Decision Tree, Random Forest, and Support Vector Machine (SVM) using actual trained scikit-learn pipelines.
+A local-first Iris classification workbench with an interactive Streamlit dashboard, a command-line interface, and four machine-learning classifiers evaluated on the canonical Iris dataset.
+
+## Overview
+
+IrisVision AI uses the 150-record Iris dataset bundled locally in `data/iris.csv` to explore flower measurements, compare classification models, and predict a species from four measurements in centimeters. It preserves the original K-Nearest Neighbors (KNN) script and adds a dashboard, model-selection workflow, CLI, visualizations, and automated tests.
+
+The project runs locally and uses no external APIs, runtime internet access, or credentials. Models are trained when the dashboard or CLI runs; no trained model binary is included.
 
 ## Features
 
-- Interactive Streamlit dashboard with overview, prediction, model comparison, dataset explorer, and model evaluation sections.
-- Manual measurement entry or sliders for the four measurements in centimeters.
-- Select any of four trained classifiers and view model-produced species probabilities.
-- Training-only stratified cross-validation for model selection; one reserved stratified holdout for final comparison.
-- Macro-averaged precision, recall and F1, accuracy, confusion matrices, classification reports, and measured runtime.
-- Interactive Plotly charts for class counts, feature distributions and relationships, metric comparison, runtime, probabilities, and confusion matrices.
-- Command-line model evaluation and prediction, plus automated tests.
-- No paid APIs, external credentials, runtime internet access, or generated/fabricated example records.
+- Streamlit dashboard with overview, interactive prediction, model comparison, dataset explorer, and model evaluation sections.
+- Flower measurements entered manually or selected with sliders.
+- Four selectable classifiers: KNN, Decision Tree, Random Forest, and Support Vector Machine (SVM).
+- Model-produced species probability estimates where supported by the classifier.
+- Stratified 5-fold cross-validation for model selection, confined to the training partition, followed by evaluation on a reserved stratified holdout.
+- Accuracy, macro-averaged precision, recall and F1, classification reports, confusion matrices, and local runtime measurements.
+- Interactive Plotly charts for dataset distributions, feature relationships, model metrics, runtimes, probability estimates, and confusion matrices.
+- Command-line model comparison and optional flower prediction.
+- Input validation and an extrapolation warning for measurements outside the training-data range.
+- Automated tests for dataset handling, models, evaluation, and input validation.
+- The original KNN implementation retained at `legacy/main.py`.
 
-## Dataset and integrity
+## Technology Stack
 
-`data/iris.csv` contains the 150 canonical Iris observations (four numeric features and the original species labels) exported from scikit-learn's bundled `load_iris` copy of the classic Fisher Iris dataset. The project ships the records locally and does not fetch them from the internet. All records are retained; the canonical data includes **one repeated complete row**, which is not removed or silently modified. The three classes are setosa, versicolor, and virginica, with 50 records each.
+| Technology | Purpose |
+|---|---|
+| Python | Application and model implementation |
+| Streamlit | Interactive local dashboard |
+| scikit-learn | Classifiers, pipelines, cross-validation, and evaluation metrics |
+| pandas and NumPy | Dataset handling and numerical input validation |
+| Plotly | Interactive charts |
+| pytest | Automated tests |
 
-The legacy script loaded the same bundled dataset at runtime. Its original KNN flow remains available, byte-for-byte, at `legacy/main.py`; the original console capture is retained in `assets/original_console_run.png`.
+Dependency versions are pinned in `requirements.txt`.
 
-## Architecture
+## Project Structure
 
 ```text
-app.py                    Streamlit dashboard and navigation
-main.py                   CLI model comparison and optional prediction
-irisvision/data.py        Dataset loading and input validation
-irisvision/models.py      Four pipelines and tuning grids
-irisvision/evaluation.py  Stratified split, training-only CV and final metrics
-irisvision/prediction.py  Validated model-backed predictions
-irisvision/visualizations.py  Plotly chart builders
-data/iris.csv             Canonical, local Iris records
-data/README.md            Dataset source, schema, and integrity notes
-legacy/main.py            Unmodified original KNN script
-assets/original_console_run.png  Original output capture
-tests/                    Dataset, model, evaluation, and input tests
-results/                  Actual comparison CSV and classification reports
-requirements.txt          Pinned runtime/test dependencies
+.
+├── app.py                         Streamlit dashboard and navigation
+├── main.py                        CLI model comparison and prediction
+├── irisvision/
+│   ├── data.py                    Dataset loading and measurement validation
+│   ├── evaluation.py              Model selection and holdout evaluation
+│   ├── models.py                  Classifier pipelines and tuning grids
+│   ├── prediction.py              Model-backed prediction helpers
+│   └── visualizations.py          Plotly chart builders
+├── data/
+│   ├── iris.csv                   Local canonical Iris records
+│   └── README.md                  Dataset source, schema, and integrity notes
+├── legacy/
+│   └── main.py                    Original KNN script
+├── assets/
+│   └── original_console_run.png   Original console output capture
+├── results/
+│   ├── model_comparison.csv       Recorded model metrics and runtimes
+│   ├── classification_reports.json Per-class metrics from the recorded run
+│   └── README.md                  Evaluation output notes
+├── tests/
+│   └── test_project.py            Automated tests
+├── requirements.txt               Pinned dependencies
+├── pytest.ini                     pytest configuration
+├── .gitignore
+├── LICENSE
+└── README.md
 ```
 
-## Algorithms
+## System Architecture
 
-- **KNN:** `StandardScaler` followed by a 5-neighbor KNN baseline, with its parameters tuned only within training folds. This preserves the original model family and preprocessing approach.
-- **Decision Tree:** deterministic `DecisionTreeClassifier`; scaling is not applied because tree split decisions do not require feature standardization.
-- **Random Forest:** deterministic 200-tree baseline; its training-only search considers tree count and depth/leaf settings.
-- **SVM:** `StandardScaler` followed by `SVC(probability=True)`, so the dashboard can display model-produced probability estimates.
+The dashboard and CLI share the Python modules in `irisvision/`. Both load the local CSV dataset, build and evaluate the model pipelines, and use the selected fitted pipeline for predictions. The dashboard presents those results with Streamlit and Plotly; the CLI prints evaluation results and optional prediction output in the terminal.
 
-All preprocessing is encapsulated in scikit-learn pipelines. Scalers are fit separately inside each cross-validation training fold, then refit on the complete training partition by the selected search. The holdout is not supplied to `GridSearchCV`.
+```text
+Streamlit dashboard ─┐
+                     ├── irisvision modules ── local data/iris.csv
+Command-line interface┘          │
+                                  └── scikit-learn pipelines and evaluation
+```
 
-## Evaluation methodology
+## Models and Evaluation
 
-The default, reproducible partition is a stratified 80/20 train/test split with `random_state=42`. The 120-record training partition is used for stratified 5-fold cross-validation. Each model's hyperparameters are selected by **macro F1 on training folds**; after selection, the fitted model is evaluated once on the 30-record holdout. The same split and metrics are used for all four models.
+The project evaluates four pipelines:
 
-- **Validation/CV performance** is an average across training-only folds and informs parameter selection.
-- **Final test performance** is measured on records withheld from that selection procedure. It is a more independent estimate for this split, not a guarantee of performance on future, different, or larger populations.
-- Precision, recall and F1 use macro averaging, giving each of the three species equal weight. The classification report also shows per-species results and support.
-- Training time includes cross-validation search and final refit; prediction timing is a small local measurement and is hardware/runtime dependent. Neither is a stable benchmark across computers.
+- **KNN:** `StandardScaler` followed by a K-Nearest Neighbors classifier.
+- **Decision Tree:** a deterministic decision tree, without feature scaling.
+- **Random Forest:** a deterministic random forest, without feature scaling.
+- **SVM:** `StandardScaler` followed by an SVC configured to provide probability estimates.
 
-No algorithm is required to achieve a predetermined accuracy. Scores will vary if the data, split, library versions, or evaluation design change.
+The evaluation uses a stratified 80/20 train/test split with `random_state=42`. Hyperparameter selection uses stratified 5-fold cross-validation on the training partition and macro F1 scoring. The reserved test partition is evaluated after model selection. Preprocessing is part of each scikit-learn pipeline, so scaling is fit within training folds and not on the holdout data.
 
-The packaged run is recorded in `results/model_comparison.csv` and `results/classification_reports.json`. On that run, KNN and Decision Tree each scored 93.33% test accuracy, Random Forest 96.67%, and SVM 93.33%; the best 5-fold training CV macro F1 was 0.975 for SVM. These figures describe this one small holdout only and do not establish that one model generalizes best. Runtime measures are machine-dependent.
+The packaged metrics in `results/model_comparison.csv` and per-class reports in `results/classification_reports.json` are outputs from a recorded run. Runtime values depend on the machine and software environment. Scores on this small, familiar dataset are illustrative and do not guarantee results on other data.
 
-## Windows setup (PowerShell / Visual Studio Code)
+## Installation
 
-Use Python 3.11 or 3.12. Extract the ZIP first, then open the extracted folder in Visual Studio Code. In PowerShell, change to that folder (adjust the path as needed):
+Use Python 3.11 or 3.12. From the project root, create and activate a virtual environment, then install the pinned dependencies.
+
+### Windows PowerShell
 
 ```powershell
-cd "$HOME\Downloads\IrisVision-AI"
 py -3.11 -m venv .venv
-# If Python 3.11 is not installed, use this instead:
-# py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-If PowerShell blocks activation, either allow activation for the current terminal with `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` and activate again, or call the environment's interpreter directly as shown below. After dependencies have been installed, the dashboard and tests run offline.
+If Python 3.11 is unavailable, create the environment with `py -3.12 -m venv .venv`. If PowerShell blocks activation, allow it for the current terminal with `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`, then activate the environment again.
 
-### Run the dashboard
+### Linux or macOS
 
-```powershell
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+## Running the Project
+
+### Dashboard
+
+Run from the project root with the virtual environment activated:
+
+```bash
 streamlit run app.py
 ```
 
-Streamlit prints a local address; open it in your browser. Use the left navigation to switch between the five sections. Select the active classifier in the sidebar.
+Open the local address printed by Streamlit. Use the sidebar to select a dashboard section and active classifier.
 
-### Run the CLI
+### Command-line interface
 
-```powershell
+Evaluate all four classifiers:
+
+```bash
 python main.py
+```
+
+Evaluate the models and predict a species from sepal length, sepal width, petal length, and petal width, in centimeters:
+
+```bash
 python main.py --predict 5.1 3.5 1.4 0.2
+```
+
+Choose a classifier for the prediction:
+
+```bash
 python main.py --predict 6.0 2.9 4.5 1.5 --model "Support Vector Machine (SVM)"
 ```
 
-The first command evaluates the four models. `--predict` accepts sepal length, sepal width, petal length, and petal width, in that order and in centimeters. The default prediction model is the original KNN baseline. Predictions run through a fitted pipeline; no output label is hard-coded.
+The default prediction model is the original KNN baseline. The CLI performs model evaluation before making an optional prediction.
 
-### Run tests
+### Tests
 
-```powershell
+Run the automated test suite from the project root:
+
+```bash
 python -m pytest -q
 ```
 
-In VS Code, choose `.venv\Scripts\python.exe` as the Python interpreter if it is not selected automatically.
+## Dataset
 
-## Screenshots
+`data/iris.csv` contains the 150 canonical Iris observations, four numeric measurements in centimeters, and the species labels `setosa`, `versicolor`, and `virginica`. Each species has 50 records. Dataset source, schema, and integrity notes are documented in [`data/README.md`](data/README.md).
 
-The original project console capture is included at [`assets/original_console_run.png`](assets/original_console_run.png). The new dashboard renders its dataset and evaluation visualizations interactively when run locally.
+## Screenshot
 
-## Known limitations
+The repository includes the original script's console output capture:
 
-- Iris is a tiny, balanced, well-studied teaching dataset; its scores are not evidence of real-world or clinical performance.
-- A predicted class and its probabilities are model outputs, not a causal explanation or certainty. SVM probability estimates are produced by scikit-learn's internal probability estimation.
-- Measurements outside the range observed in the training partition are allowed with an extrapolation warning; classification beyond the training data may be unreliable.
-- Timing numbers are local diagnostics, not controlled performance benchmarks.
-- The dashboard trains and tunes its small models locally when first loaded; no pre-trained model binary is bundled.
-- PowerShell installation commands are documented for Windows; verification in this delivery was run in the available Linux sandbox, not on a Windows device.
+![Original console output](assets/original_console_run.png)
+
+## Known Limitations
+
+- The Iris dataset is small and educational; these results are not evidence of clinical or other high-stakes suitability.
+- A predicted species and its probability estimates are model outputs, not certainty or causal explanations. SVM probabilities use scikit-learn's probability estimation.
+- Positive finite measurements are accepted, including values outside the training range. The dashboard warns about out-of-range values, for which predictions may be unreliable.
+- Runtime measurements are local diagnostics, not controlled benchmarks.
+- The dashboard trains and tunes the models locally when loaded; a pre-trained model is not bundled.
+- Windows setup commands are documented, but the project delivery was verified in a Linux sandbox rather than on a Windows device.
+
+## Author
+
+**SHOJIB-80** — [GitHub profile](https://github.com/SHOJIB-80)
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
